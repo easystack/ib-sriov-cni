@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/Mellanox/sriovnet"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/vishvananda/netlink"
 
@@ -71,29 +70,18 @@ func (p *pciUtilsImpl) GetPciAddress(ifName string, vf int) (string, error) {
 }
 
 // RebindVf unbind then bind the vf
-func (p *pciUtilsImpl) RebindVf(pfName, vfPciAddress string) error {
-	pfHandle, err := sriovnet.GetPfNetdevHandle(pfName)
-	if err != nil {
-		return err
-	}
-	var vf *sriovnet.VfObj
-	found := false
-	for _, vfObj := range pfHandle.List {
-		if vfObj.PciAddress == vfPciAddress {
-			vf = vfObj
-			found = true
-		}
-	}
-	if !found {
-		return fmt.Errorf("failed to find VF %s for PF %s", vfPciAddress, pfName)
-	}
-
-	err = sriovnet.UnbindVf(pfHandle, vf)
+func (p *pciUtilsImpl) RebindVf(vfPciAddress string) error {
+	driver, err := utils.GetDriverName(vfPciAddress)
 	if err != nil {
 		return err
 	}
 
-	err = sriovnet.BindVf(pfHandle, vf)
+	err = utils.UnbindVf(vfPciAddress, driver)
+	if err != nil {
+		return err
+	}
+
+	err = utils.BindVf(vfPciAddress, driver)
 	if err != nil {
 		return err
 	}
@@ -235,19 +223,22 @@ func (s *sriovManager) ApplyVFConfig(conf *types.NetConf) error {
 		if !utils.IsValidGUID(conf.GUID) {
 			return fmt.Errorf("invalid guid %s", conf.GUID)
 		}
-		// save link guid
-		vfLink, err := s.nLink.LinkByName(conf.HostIFNames)
-		if err != nil {
-			return fmt.Errorf("failed to lookup vf %q: %v", conf.HostIFNames, err)
-		}
 
-		conf.HostIFGUID = vfLink.Attrs().HardwareAddr.String()[36:]
+		if !conf.UserspaceMode {
+			// save link guid
+			vfLink, err := s.nLink.LinkByName(conf.HostIFNames)
+			if err != nil {
+				return fmt.Errorf("failed to lookup vf %q: %v", conf.HostIFNames, err)
+			}
+
+			conf.HostIFGUID = vfLink.Attrs().HardwareAddr.String()[36:]
+		}
 
 		// Set link guid
 		if err := s.setVfGUID(conf, pfLink, conf.GUID); err != nil {
 			return err
 		}
-	} else {
+	} else if !conf.UserspaceMode {
 		// Verify VF have valid GUID.
 		vfLink, err := s.nLink.LinkByName(conf.HostIFNames)
 		if err != nil {
@@ -339,7 +330,7 @@ func (s *sriovManager) setVfGUID(conf *types.NetConf, pfLink netlink.Link, guidA
 		return fmt.Errorf("failed to add port guid %s: %v", guid, err)
 	}
 	// unbind vf then bind it to apply the guid
-	err = s.utils.RebindVf(conf.Master, conf.DeviceID)
+	err = s.utils.RebindVf(conf.DeviceID)
 	if err != nil {
 		return err
 	}

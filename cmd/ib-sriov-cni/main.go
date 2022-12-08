@@ -142,7 +142,7 @@ func doVFConfig(sm localtypes.Manager, netConf *localtypes.NetConf, netns ns.Net
 		return fmt.Errorf("infiniBand SRI-OV CNI failed to configure VF %q", err)
 	}
 
-	// Note(adrianc): We do this here as ApplyVFCOnfig is rebinding the VF, causing the RDMA device to be recreated.
+	// Note(adrianc): We do this here as ApplyVFConfig is rebinding the VF, causing the RDMA device to be recreated.
 	// We do this here due to some un-intuitive kernel behavior (which i hope will change), moving an RDMA device
 	// to namespace causes all of its associated ULP devices (IPoIB) to be recreated in the default namespace,
 	// hence SetupVF needs to occur after moving RDMA device to namespace
@@ -165,17 +165,19 @@ func doVFConfig(sm localtypes.Manager, netConf *localtypes.NetConf, netns ns.Net
 		}()
 	}
 
-	err = sm.SetupVF(netConf, args.IfName, args.ContainerID, netns)
-	if err != nil {
-		nsErr := netns.Do(func(_ ns.NetNS) error {
-			_, innerErr := netlink.LinkByName(args.IfName)
-			return innerErr
-		})
-		if nsErr == nil {
-			_ = sm.ReleaseVF(netConf, args.IfName, args.ContainerID, netns)
+	if !netConf.UserspaceMode {
+		err = sm.SetupVF(netConf, args.IfName, args.ContainerID, netns)
+		if err != nil {
+			nsErr := netns.Do(func(_ ns.NetNS) error {
+				_, innerErr := netlink.LinkByName(args.IfName)
+				return innerErr
+			})
+			if nsErr == nil {
+				_ = sm.ReleaseVF(netConf, args.IfName, args.ContainerID, netns)
+			}
+			return fmt.Errorf("failed to set up pod interface %q from the device %q: %v",
+				args.IfName, netConf.DeviceID, err)
 		}
-		return fmt.Errorf("failed to set up pod interface %q from the device %q: %v",
-			args.IfName, netConf.DeviceID, err)
 	}
 	return nil
 }
@@ -254,6 +256,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	result := &current.Result{}
 	result.Interfaces = []*current.Interface{{
 		Name:    args.IfName,
+		Mac:     netConf.GUID,
 		Sandbox: netns.Path(),
 	}}
 
@@ -272,11 +275,13 @@ func cmdAdd(args *skel.CmdArgs) error {
 
 		newResult.Interfaces = result.Interfaces
 
-		err = netns.Do(func(_ ns.NetNS) error {
-			return ipam.ConfigureIface(args.IfName, newResult)
-		})
-		if err != nil {
-			return err
+		if !netConf.UserspaceMode {
+			err = netns.Do(func(_ ns.NetNS) error {
+				return ipam.ConfigureIface(args.IfName, newResult)
+			})
+			if err != nil {
+				return err
+			}
 		}
 
 		result = newResult
@@ -335,16 +340,18 @@ func cmdDel(args *skel.CmdArgs) error {
 	}
 	defer netns.Close()
 
-	// Lock CNI operation to serialize the operation
-	lock, err := lockCNIExecution()
-	if err != nil {
-		return err
-	}
-	defer unlockCNIExecution(lock)
+	if !netConf.UserspaceMode {
+		// Lock CNI operation to serialize the operation
+		lock, lErr := lockCNIExecution()
+		if lErr != nil {
+			return err
+		}
+		defer unlockCNIExecution(lock)
 
-	err = sm.ReleaseVF(netConf, args.IfName, args.ContainerID, netns)
-	if err != nil {
-		return err
+		err = sm.ReleaseVF(netConf, args.IfName, args.ContainerID, netns)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Move RDMA device to default namespace

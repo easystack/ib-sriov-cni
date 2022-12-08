@@ -5,6 +5,8 @@ COPY . /usr/src/ib-sriov-cni
 ENV HTTP_PROXY $http_proxy
 ENV HTTPS_PROXY $https_proxy
 
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
+
 RUN apk add --update --virtual build-dependencies build-base linux-headers git && \
     cd /usr/src/ib-sriov-cni && \
     make clean && \
