@@ -64,7 +64,7 @@ build: $(BUILDDIR)/$(BINARY_NAME) ; $(info Building $(BINARY_NAME)...) ## Build 
 	$(info Done!)
 
 $(BUILDDIR)/$(BINARY_NAME): $(GOFILES) | $(BUILDDIR)
-	@cd $(BASE)/cmd/$(PACKAGE) && CGO_ENABLED=0 $(GO) build -o $(BUILDDIR)/$(BINARY_NAME) -tags no_openssl -ldflags $(LDFLAGS) -v
+	@cd $(BASE)/cmd/$(PACKAGE) && CGO_ENABLED=0 GOPROXY=https://goproxy.io,direct $(GO) build -o $(BUILDDIR)/$(BINARY_NAME) -tags no_openssl -ldflags $(LDFLAGS) -v
 
 # Tools
 $(GOLANGCI_LINT): | $(BASE) ; $(info  building golangci-lint...)

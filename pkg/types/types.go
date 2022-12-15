@@ -16,6 +16,7 @@ type NetConf struct {
 	Master              string
 	DeviceID            string `json:"deviceID"` // PCI address of a VF in valid sysfs format
 	VFID                int
+	UserspaceMode       bool
 	HostIFNames         string // VF netdevice name(s)
 	HostIFGUID          string // VF netdevice GUID
 	ContIFNames         string // VF names after in the container; used during deletion
@@ -64,5 +65,5 @@ type PciUtils interface {
 	GetSriovNumVfs(ifName string) (int, error)
 	GetVFLinkNamesFromVFID(pfName string, vfID int) ([]string, error)
 	GetPciAddress(ifName string, vf int) (string, error)
-	RebindVf(pfName, vfPciAddress string) error
+	RebindVf(vfPciAddress string) error
 }

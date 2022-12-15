@@ -53,10 +53,20 @@ func LoadDeviceInfo(netConf *types.NetConf) error {
 	// Get interface name
 	hostIFNames, err := utils.GetVFLinkNames(netConf.DeviceID)
 	if err != nil || hostIFNames == "" {
-		return fmt.Errorf("load config: failed to detect VF %s name with error, %q", netConf.DeviceID, err)
+		// VF interface not found; check if VF has userspace driver
+		hasUserspaceDriver, err := utils.HasUserspaceDriver(netConf.DeviceID)
+		if err != nil {
+			return fmt.Errorf("load config: failed to detect if VF %s has userspace driver %q", netConf.DeviceID, err)
+		}
+		netConf.UserspaceMode = hasUserspaceDriver
 	}
 
 	netConf.HostIFNames = hostIFNames
+
+	if hostIFNames == "" && !netConf.UserspaceMode {
+		return fmt.Errorf("load config: the VF %s does not have a interface name or a userspace driver", netConf.DeviceID)
+	}
+
 	return nil
 }
 

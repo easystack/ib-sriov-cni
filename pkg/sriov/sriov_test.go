@@ -283,7 +283,7 @@ var _ = Describe("Sriov", func() {
 			mockedNetLinkManger.On("LinkSetVfNodeGUID", fakeLink, mock.Anything, mock.Anything).Return(nil)
 			mockedNetLinkManger.On("LinkSetVfPortGUID", fakeLink, mock.Anything, mock.Anything).Return(nil)
 
-			mockedPciUtils.On("RebindVf", netconf.Master, netconf.DeviceID).Return(errors.New("mocked failed"))
+			mockedPciUtils.On("RebindVf", netconf.DeviceID).Return(errors.New("mocked failed"))
 
 			sm := sriovManager{nLink: mockedNetLinkManger, utils: mockedPciUtils}
 			err = sm.ApplyVFConfig(netconf)
